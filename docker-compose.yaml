@@ -1,0 +1,120 @@
+version: '3'
+
+services:
+    micro-drivers:
+        build: ./maratona-microsservico-drivers
+        ports: 
+            - "8081:8081"
+        networks:
+            - maratona-network
+
+    micro-rabbitmq:
+        image: 'rabbitmq:3.8-management-alpine'
+        hostname: rabbitmq
+        ports:
+            - "15672:15672"
+            - "5672:5672"
+        volumes:
+            - './maratona-microsservico-rabbitmq/rabbitmq_data:/var/lib/rabbitmq/mnesia'
+        environment:
+            - RABBITMQ_DEFAULT_USER=admin 
+            - RABBITMQ_DEFAULT_PASS=admin
+        networks:
+            - maratona-network
+
+    ## MICRO ORDER ###
+    micro-orders-db:
+        image: mysql:5.7
+        command: --innodb-use-native-aio=0
+        container_name: micro-orders-db
+        #restart: always
+        tty: true
+        ports:
+            - "3306"
+        volumes:
+            - ./maratona-microsservico-order/.docker/dbdata:/var/lib/mysql
+            - ./maratona-microsservico-order/.docker/mysql:/docker-entrypoint-initdb.d
+        environment:
+            - MYSQL_ROOT_PASSWORD=root
+            - MYSQL_USER=root
+        networks:
+            - micro-orders-network
+
+    micro-orders-app:
+        build: ./maratona-microsservico-order
+        entrypoint: ./.docker/entrypoint.sh
+        container_name: micro-orders-app
+        environment:
+            - CHOKIDAR_USEPOLLING=true
+        ports:
+            - 3000:3000
+        volumes:
+            - ./maratona-microsservico-order/:/home/node/app
+        networks:
+            - maratona-network
+            - micro-orders-network
+        depends_on: 
+            - micro-rabbitmq
+
+    ## MICRO MAPPING
+    micro-mapping-db:
+        image: mysql:5.7
+        command: --innodb-use-native-aio=0
+        container_name: micro-mapping-db
+        #restart: always
+        tty: true
+        ports:
+          - "3306"
+        volumes:
+          - ./maratona-microsservico-mapping/backend/.docker/dbdata:/var/lib/mysql
+          - ./maratona-microsservico-mapping/backend/.docker/mysql:/docker-entrypoint-initdb.d
+        environment:
+          - MYSQL_ROOT_PASSWORD=root
+          - MYSQL_USER=root
+        networks:
+          - micro-mapping-network
+        
+    micro-mapping-backend:
+        build: ./maratona-microsservico-mapping/backend
+        entrypoint: ./.docker/entrypoint.sh
+        container_name: micro-mapping-backend
+        environment:
+            - CHOKIDAR_USEPOLLING=true
+        ports:
+            - 3001:3001
+        volumes:
+            - ./maratona-microsservico-mapping/backend:/home/node/app
+        networks:
+            - maratona-network
+            - micro-mapping-network
+        depends_on: 
+            - micro-rabbitmq
+
+    micro-mapping-frontend:
+        build: ./maratona-microsservico-mapping/frontend
+        entrypoint: ./.docker/entrypoint.sh
+        container_name: micro-mapping-frontend
+        environment:
+            - CHOKIDAR_USEPOLLING=true
+            - PORT=3002
+        ports:
+            - 3002:3002
+        volumes:
+            - ./maratona-microsservico-mapping/frontend:/home/node/app
+        networks:
+            - maratona-network
+
+    micro-simulator:
+        build: ./maratona-microsservico-simulador
+        networks:
+            - maratona-network
+        depends_on: 
+            - micro-rabbitmq
+
+networks:
+    maratona-network:
+        driver: bridge
+    micro-orders-network:
+        driver: bridge
+    micro-mapping-network:
+        driver: bridge
